@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Train Model{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container">
+        <h1><i class="fas fa-cogs"></i> Train Model</h1>
+        <p>Configure and start YOLO model training</p>
+    </div>
+</div>
+
+<div class="container">
+    <div class="train-layout">
+        <!-- Configuration Form -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-sliders-h"></i> Training Configuration</h2>
+            </div>
+            <div class="card-body">
+                <form id="trainForm">
+                    <!-- Dataset Selection -->
+                    <div class="form-group">
+                        <label for="dataset"><i class="fas fa-database"></i> Dataset</label>
+                        <select id="dataset" class="form-select" required>
+                            <option value="">Select a dataset...</option>
+                            {% for ds in datasets %}
+                            {% if ds.has_yaml %}
+                            <option value="{{ ds.name }}">{{ ds.name }} ({{ ds.train_images }} train / {{ ds.val_images
+                                }} val)</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                        {% if datasets|length == 0 %}
+                        <p class="help-text error"><i class="fas fa-exclamation-circle"></i> No datasets available. <a
+                                href="/dataset">Create one first</a></p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Model Selection -->
+                    <div class="form-group">
+                        <label for="model"><i class="fas fa-cube"></i> Base Model</label>
+                        <div class="model-grid">
+                            {% for model_id, model_info in models.items() %}
+                            <label class="model-card">
+                                <input type="radio" name="model" value="{{ model_id }}" {% if loop.first %}checked{%
+                                    endif %}>
+                                <div class="model-content">
+                                    <span class="model-name">{{ model_info.name }}</span>
+                                    <span class="model-meta">{{ model_info.size }} • {{ model_info.speed }}</span>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Run Name -->
+                    <div class="form-group">
+                        <label for="runName"><i class="fas fa-tag"></i> Run Name</label>
+                        <input type="text" id="runName" class="form-input" placeholder="e.g., my_model_v1">
+                    </div>
+
+                    <!-- Hyperparameters -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="epochs"><i class="fas fa-repeat"></i> Epochs</label>
+                            <input type="number" id="epochs" class="form-input" value="50" min="1" max="1000">
+                        </div>
+                        <div class="form-group">
+                            <label for="batch"><i class="fas fa-layer-group"></i> Batch Size</label>
+                            <input type="number" id="batch" class="form-input" value="16" min="1" max="128">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="imgsz"><i class="fas fa-expand"></i> Image Size</label>
+                            <select id="imgsz" class="form-select">
+                                <option value="320">320</option>
+                                <option value="416">416</option>
+                                <option value="512">512</option>
+                                <option value="640" selected>640</option>
+                                <option value="800">800</option>
+                                <option value="1024">1024</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="device"><i class="fas fa-microchip"></i> Device</label>
+                            <select id="device" class="form-select">
+                                <option value="cpu">CPU</option>
+                                <option value="0">GPU 0</option>
+                                <option value="0,1">GPU 0,1</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg btn-block" id="startBtn">
+                        <i class="fas fa-play"></i> Start Training
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Active Jobs -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-tasks"></i> Training Jobs</h2>
+            </div>
+            <div class="card-body">
+                <div id="jobsContainer">
+                    {% if jobs|length == 0 %}
+                    <div class="empty-state small">
+                        <i class="fas fa-clock"></i>
+                        <p>No active training jobs</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let pollingInterval = null;
+
+    // Form submission
+    document.getElementById('trainForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const dataset = document.getElementById('dataset').value;
+        if (!dataset) {
+            showToast('Please select a dataset', 'error');
+            return;
+        }
+
+        const model = document.querySelector('input[name="model"]:checked').value;
+        const config = {
+            dataset: dataset,
+            model: model,
+            name: document.getElementById('runName').value || dataset,
+            epochs: parseInt(document.getElementById('epochs').value),
+            batch: parseInt(document.getElementById('batch').value),
+            imgsz: parseInt(document.getElementById('imgsz').value),
+            device: document.getElementById('device').value
+        };
+
+        try {
+            const result = await apiCall('/api/train/start', {
+                method: 'POST',
+                body: JSON.stringify(config)
+            });
+
+            showToast('Training started!', 'success');
+            startPolling();
+        } catch (error) {
+            // Error shown by apiCall
+        }
+    });
+
+    // Poll for job updates
+    function startPolling() {
+        if (pollingInterval) return;
+
+        pollingInterval = setInterval(refreshJobs, 2000);
+        refreshJobs();
+    }
+
+    async function refreshJobs() {
+        try {
+            const data = await fetch('/api/train/jobs').then(r => r.json());
+            renderJobs(data.jobs || []);
+
+            // Stop polling if no active jobs
+            const hasActive = data.jobs.some(j => j.status === 'running' || j.status === 'pending');
+            if (!hasActive && pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        } catch (error) {
+            console.error('Failed to refresh jobs:', error);
+        }
+    }
+
+    function renderJobs(jobs) {
+        const container = document.getElementById('jobsContainer');
+
+        if (jobs.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state small">
+                    <i class="fas fa-clock"></i>
+                    <p>No active training jobs</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = jobs.map(job => `
+            <div class="job-card job-${job.status}">
+                <div class="job-header">
+                    <span class="job-name">${job.config.name || job.job_id}</span>
+                    <span class="job-status badge badge-${getStatusBadge(job.status)}">${job.status}</span>
+                </div>
+                <div class="job-model">${job.config.model}</div>
+                <div class="job-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${job.progress}%"></div>
+                    </div>
+                    <span class="progress-text">Epoch ${job.current_epoch}/${job.total_epochs} (${job.progress}%)</span>
+                </div>
+                ${job.status === 'running' ? `
+                    <button class="btn btn-sm btn-danger" onclick="stopJob('${job.job_id}')">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                ` : ''}
+                ${job.status === 'completed' && job.save_dir ? `
+                    <p class="job-result"><i class="fas fa-check-circle"></i> Saved to: ${job.save_dir}</p>
+                ` : ''}
+                ${job.error ? `
+                    <p class="job-error"><i class="fas fa-exclamation-circle"></i> ${job.error}</p>
+                ` : ''}
+            </div>
+        `).join('');
+    }
+
+    function getStatusBadge(status) {
+        switch (status) {
+            case 'running': return 'info';
+            case 'completed': return 'success';
+            case 'failed': return 'danger';
+            case 'stopped': return 'warning';
+            default: return 'secondary';
+        }
+    }
+
+    async function stopJob(jobId) {
+        try {
+            await apiCall(`/api/train/stop/${jobId}`, { method: 'POST' });
+            showToast('Training stopped', 'info');
+            refreshJobs();
+        } catch (error) {
+            // Error shown by apiCall
+        }
+    }
+
+    // Start polling if there are active jobs
+    {% if jobs | length > 0 %}
+    startPolling();
+    {% endif %}
+</script>
+{% endblock %}

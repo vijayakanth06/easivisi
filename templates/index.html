@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <div class="hero-content">
+        <h1 class="hero-title">
+            <span class="gradient-text">EasiVisi</span>
+        </h1>
+        <p class="hero-subtitle">Train Custom YOLO Models Without Writing Code</p>
+        <p class="hero-description">
+            Annotate images, configure training, and deploy object detection models — all through an intuitive web
+            interface.
+        </p>
+        <div class="hero-actions">
+            <a href="/dataset" class="btn btn-primary btn-lg">
+                <i class="fas fa-rocket"></i> Get Started
+            </a>
+            <a href="#features" class="btn btn-secondary btn-lg">
+                <i class="fas fa-info-circle"></i> Learn More
+            </a>
+        </div>
+    </div>
+    <div class="hero-visual">
+        <div class="floating-card">
+            <i class="fas fa-brain"></i>
+            <span>AI Powered</span>
+        </div>
+        <div class="floating-card delay-1">
+            <i class="fas fa-draw-polygon"></i>
+            <span>Easy Annotation</span>
+        </div>
+        <div class="floating-card delay-2">
+            <i class="fas fa-chart-line"></i>
+            <span>Real-time Training</span>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<section class="stats-section">
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-database"></i></div>
+                <div class="stat-value">{{ datasets|length }}</div>
+                <div class="stat-label">Datasets</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-history"></i></div>
+                <div class="stat-value">{{ runs|length }}</div>
+                <div class="stat-label">Training Runs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-cube"></i></div>
+                <div class="stat-value">5</div>
+                <div class="stat-label">YOLO Models</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-bolt"></i></div>
+                <div class="stat-value">GPU</div>
+                <div class="stat-label">Ready</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features -->
+<section id="features" class="features-section">
+    <div class="container">
+        <h2 class="section-title">Powerful Features</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-upload"></i>
+                </div>
+                <h3>Easy Dataset Upload</h3>
+                <p>Drag and drop images to create datasets. Automatic validation and organization.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-draw-polygon"></i>
+                </div>
+                <h3>Browser Annotation</h3>
+                <p>Draw bounding boxes directly in your browser. No external tools required.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-sliders-h"></i>
+                </div>
+                <h3>Configurable Training</h3>
+                <p>Choose models, set hyperparameters, and start training with one click.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <h3>Progress Monitoring</h3>
+                <p>Watch training progress in real-time with loss curves and metrics.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-search"></i>
+                </div>
+                <h3>Instant Inference</h3>
+                <p>Test your trained models immediately on new images.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-download"></i>
+                </div>
+                <h3>Export Models</h3>
+                <p>Download trained weights for deployment anywhere.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Quick Actions -->
+<section class="actions-section">
+    <div class="container">
+        <h2 class="section-title">Quick Actions</h2>
+        <div class="actions-grid">
+            <a href="/dataset" class="action-card">
+                <i class="fas fa-folder-plus"></i>
+                <h3>Create Dataset</h3>
+                <p>Upload and organize your training images</p>
+            </a>
+            {% if datasets|length > 0 %}
+            <a href="/annotate/{{ datasets[0].name }}" class="action-card">
+                <i class="fas fa-edit"></i>
+                <h3>Annotate Images</h3>
+                <p>Draw bounding boxes on your images</p>
+            </a>
+            {% endif %}
+            <a href="/train" class="action-card">
+                <i class="fas fa-play-circle"></i>
+                <h3>Start Training</h3>
+                <p>Configure and launch model training</p>
+            </a>
+            <a href="/inference" class="action-card">
+                <i class="fas fa-magic"></i>
+                <h3>Run Inference</h3>
+                <p>Test models on new images</p>
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Recent Activity -->
+{% if datasets|length > 0 or runs|length > 0 %}
+<section class="recent-section">
+    <div class="container">
+        <h2 class="section-title">Recent Activity</h2>
+        <div class="recent-grid">
+            {% if datasets|length > 0 %}
+            <div class="recent-card">
+                <h3><i class="fas fa-database"></i> Recent Datasets</h3>
+                <ul class="recent-list">
+                    {% for dataset in datasets[:5] %}
+                    <li>
+                        <a href="/dataset/{{ dataset.name }}">
+                            <span class="item-name">{{ dataset.name }}</span>
+                            <span class="item-meta">{{ dataset.train_images + dataset.val_images }} images</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if runs|length > 0 %}
+            <div class="recent-card">
+                <h3><i class="fas fa-history"></i> Recent Runs</h3>
+                <ul class="recent-list">
+                    {% for run in runs[:5] %}
+                    <li>
+                        <a href="/runs">
+                            <span class="item-name">{{ run.name }}</span>
+                            <span class="item-meta">{{ run.project }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

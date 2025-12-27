@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Inference{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container">
+        <h1><i class="fas fa-search"></i> Inference Playground</h1>
+        <p>Test your trained models on new images</p>
+    </div>
+</div>
+
+<div class="container">
+    <div class="inference-layout">
+        <!-- Controls -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-cog"></i> Settings</h2>
+            </div>
+            <div class="card-body">
+                <!-- Model Selection -->
+                <div class="form-group">
+                    <label for="modelSelect"><i class="fas fa-cube"></i> Model</label>
+                    <select id="modelSelect" class="form-select">
+                        <option value="">Select a model...</option>
+                        {% for model in models %}
+                        <option value="{{ model.path }}" data-type="{{ model.type }}">
+                            {{ model.name }} ({{ model.type }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Confidence Threshold -->
+                <div class="form-group">
+                    <label for="confidence">
+                        <i class="fas fa-percentage"></i> Confidence Threshold:
+                        <span id="confValue">25%</span>
+                    </label>
+                    <input type="range" id="confidence" class="form-range" min="1" max="99" value="25">
+                </div>
+
+                <!-- Image Upload -->
+                <div class="form-group">
+                    <label><i class="fas fa-image"></i> Upload Image</label>
+                    <div class="upload-zone small" id="uploadZone">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Drop image or click to browse</p>
+                        <input type="file" id="imageInput" accept="image/*" hidden>
+                    </div>
+                </div>
+
+                <!-- Run Button -->
+                <button class="btn btn-primary btn-lg btn-block" id="detectBtn" disabled>
+                    <i class="fas fa-magic"></i> Run Detection
+                </button>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-eye"></i> Results</h2>
+                <span id="detectionCount" class="badge badge-info" style="display: none;">0 detections</span>
+            </div>
+            <div class="card-body">
+                <div class="result-container" id="resultContainer">
+                    <div class="empty-state">
+                        <i class="fas fa-image"></i>
+                        <p>Upload an image to see detection results</p>
+                    </div>
+                </div>
+
+                <!-- Detection List -->
+                <div id="detectionList" class="detection-list" style="display: none;">
+                    <h3>Detected Objects</h3>
+                    <ul id="detections"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let selectedFile = null;
+
+    const uploadZone = document.getElementById('uploadZone');
+    const imageInput = document.getElementById('imageInput');
+    const detectBtn = document.getElementById('detectBtn');
+
+    // Confidence slider
+    document.getElementById('confidence').addEventListener('input', (e) => {
+        document.getElementById('confValue').textContent = e.target.value + '%';
+    });
+
+    // Upload handling
+    uploadZone.addEventListener('click', () => imageInput.click());
+    uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            handleFile(e.dataTransfer.files[0]);
+        }
+    });
+    imageInput.addEventListener('change', () => {
+        if (imageInput.files.length > 0) {
+            handleFile(imageInput.files[0]);
+        }
+    });
+
+    function handleFile(file) {
+        if (!file.type.startsWith('image/')) {
+            showToast('Please select an image file', 'error');
+            return;
+        }
+
+        selectedFile = file;
+        uploadZone.innerHTML = `
+            <i class="fas fa-check-circle" style="color: var(--success)"></i>
+            <p>${file.name}</p>
+        `;
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            document.getElementById('resultContainer').innerHTML = `
+                <img src="${e.target.result}" alt="Preview" class="preview-image">
+            `;
+        };
+        reader.readAsDataURL(file);
+
+        updateDetectButton();
+    }
+
+    function updateDetectButton() {
+        const model = document.getElementById('modelSelect').value;
+        detectBtn.disabled = !selectedFile || !model;
+    }
+
+    document.getElementById('modelSelect').addEventListener('change', updateDetectButton);
+
+    // Run detection
+    detectBtn.addEventListener('click', async () => {
+        const model = document.getElementById('modelSelect').value;
+        if (!selectedFile || !model) return;
+
+        const confidence = parseInt(document.getElementById('confidence').value) / 100;
+
+        const formData = new FormData();
+        formData.append('image', selectedFile);
+        formData.append('model', model);
+        formData.append('confidence', confidence);
+
+        detectBtn.disabled = true;
+        detectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+        try {
+            const response = await fetch('/api/inference/detect', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
+            // Show result image
+            document.getElementById('resultContainer').innerHTML = `
+                <img src="${result.result_image}" alt="Detection result" class="result-image">
+            `;
+
+            // Show detection count
+            const countBadge = document.getElementById('detectionCount');
+            countBadge.textContent = `${result.count} detection${result.count !== 1 ? 's' : ''}`;
+            countBadge.style.display = 'inline-block';
+
+            // Show detection list
+            const detectionList = document.getElementById('detectionList');
+            const detections = document.getElementById('detections');
+
+            if (result.detections.length > 0) {
+                detectionList.style.display = 'block';
+                detections.innerHTML = result.detections.map(det => `
+                    <li class="detection-item">
+                        <span class="det-class">${det.class_name}</span>
+                        <span class="det-conf">${(det.confidence * 100).toFixed(1)}%</span>
+                        <span class="det-bbox">[${det.bbox.x1}, ${det.bbox.y1}, ${det.bbox.x2}, ${det.bbox.y2}]</span>
+                    </li>
+                `).join('');
+            } else {
+                detectionList.style.display = 'none';
+            }
+
+            showToast(`Found ${result.count} objects!`, 'success');
+
+        } catch (error) {
+            showToast(error.message || 'Detection failed', 'error');
+        } finally {
+            detectBtn.disabled = false;
+            detectBtn.innerHTML = '<i class="fas fa-magic"></i> Run Detection';
+            updateDetectButton();
+        }
+    });
+</script>
+{% endblock %}

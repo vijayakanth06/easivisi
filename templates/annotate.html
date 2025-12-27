@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Annotate - {{ dataset.name }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/annotator.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="annotator-container">
+    <!-- Sidebar -->
+    <aside class="annotator-sidebar">
+        <div class="sidebar-header">
+            <h2><i class="fas fa-edit"></i> Annotator</h2>
+            <a href="/dataset/{{ dataset.name }}" class="btn btn-sm btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+
+        <!-- Image List -->
+        <div class="sidebar-section">
+            <h3>Images</h3>
+            <div class="image-list" id="imageList">
+                <div class="loading"><i class="fas fa-spinner fa-spin"></i></div>
+            </div>
+        </div>
+
+        <!-- Classes -->
+        <div class="sidebar-section">
+            <h3>Classes</h3>
+            <div class="class-list" id="classList">
+                {% for cls in dataset.classes %}
+                <button class="class-btn" data-class-id="{{ loop.index0 }}" data-class-name="{{ cls }}">
+                    <span class="class-color" style="background: hsl({{ loop.index0 * 45 }}, 70%, 50%)"></span>
+                    {{ cls }}
+                </button>
+                {% else %}
+                <p class="help-text">No classes defined. <a href="/dataset/{{ dataset.name }}">Add classes first</a></p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Annotations -->
+        <div class="sidebar-section">
+            <h3>Annotations <span id="annotationCount">(0)</span></h3>
+            <div class="annotation-list" id="annotationList"></div>
+        </div>
+
+        <!-- Actions -->
+        <div class="sidebar-section sidebar-actions">
+            <button class="btn btn-primary btn-block" id="saveBtn">
+                <i class="fas fa-save"></i> Save Annotations
+            </button>
+            <button class="btn btn-secondary btn-block" id="clearBtn">
+                <i class="fas fa-trash"></i> Clear All
+            </button>
+        </div>
+    </aside>
+
+    <!-- Canvas Area -->
+    <main class="annotator-main">
+        <div class="toolbar">
+            <div class="tool-group">
+                <button class="tool-btn active" id="boxTool" title="Draw Box (B)">
+                    <i class="fas fa-vector-square"></i>
+                </button>
+                <button class="tool-btn" id="selectTool" title="Select (S)">
+                    <i class="fas fa-mouse-pointer"></i>
+                </button>
+            </div>
+            <div class="tool-group">
+                <button class="tool-btn" id="zoomIn" title="Zoom In (+)">
+                    <i class="fas fa-search-plus"></i>
+                </button>
+                <button class="tool-btn" id="zoomOut" title="Zoom Out (-)">
+                    <i class="fas fa-search-minus"></i>
+                </button>
+                <button class="tool-btn" id="resetZoom" title="Reset Zoom (0)">
+                    <i class="fas fa-expand"></i>
+                </button>
+            </div>
+            <div class="tool-group">
+                <button class="tool-btn" id="undoBtn" title="Undo (Ctrl+Z)">
+                    <i class="fas fa-undo"></i>
+                </button>
+                <button class="tool-btn" id="redoBtn" title="Redo (Ctrl+Y)">
+                    <i class="fas fa-redo"></i>
+                </button>
+            </div>
+            <div class="tool-group">
+                <button class="tool-btn" id="prevImage" title="Previous Image (←)">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="tool-btn" id="nextImage" title="Next Image (→)">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="image-info">
+                <span id="imageName">No image selected</span>
+                <span id="zoomLevel">100%</span>
+            </div>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="annotationCanvas"></canvas>
+            <div class="no-image" id="noImageMsg">
+                <i class="fas fa-image"></i>
+                <p>Select an image from the sidebar to start annotating</p>
+            </div>
+        </div>
+
+        <!-- Keyboard Shortcuts -->
+        <div class="shortcuts-help">
+            <p><kbd>B</kbd> Box tool | <kbd>S</kbd> Select | <kbd>Del</kbd> Delete | <kbd>←→</kbd> Navigate |
+                <kbd>Ctrl+S</kbd> Save</p>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/annotator.js') }}"></script>
+<script>
+    const datasetName = "{{ dataset.name }}";
+    const classes = [
+        {% for cls in dataset.classes %}
+    { id: { { loop.index0 } }, name: "{{ cls }}", color: `hsl({{ loop.index0 * 45 }}, 70%, 50%)` },
+    {% endfor %}
+    ];
+
+    // Initialize annotator
+    const annotator = new ImageAnnotator('annotationCanvas', {
+        classes: classes,
+        onSave: saveAnnotations,
+        onChange: updateAnnotationList
+    });
+
+    // Load images
+    let images = [];
+    let currentIndex = -1;
+
+    async function loadImages() {
+        try {
+            const data = await apiCall(`/api/dataset/${datasetName}/images`);
+            images = data.images || [];
+            renderImageList();
+
+            // Check for image in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const imagePath = urlParams.get('image');
+            if (imagePath) {
+                const index = images.findIndex(img => img.path === imagePath);
+                if (index !== -1) {
+                    loadImage(index);
+                    return;
+                }
+            }
+
+            // Load first image if available
+            if (images.length > 0) {
+                loadImage(0);
+            }
+        } catch (error) {
+            console.error('Failed to load images:', error);
+        }
+    }
+
+    function renderImageList() {
+        const list = document.getElementById('imageList');
+        if (images.length === 0) {
+            list.innerHTML = '<p class="help-text">No images in dataset</p>';
+            return;
+        }
+
+        list.innerHTML = images.map((img, i) => `
+            <div class="image-item ${i === currentIndex ? 'active' : ''}" data-index="${i}">
+                <img src="/dataset/${datasetName}/image/${img.path}" alt="${img.name}" loading="lazy">
+                <span>${img.name}</span>
+            </div>
+        `).join('');
+
+        list.querySelectorAll('.image-item').forEach(item => {
+            item.addEventListener('click', () => loadImage(parseInt(item.dataset.index)));
+        });
+    }
+
+    async function loadImage(index) {
+        if (index < 0 || index >= images.length) return;
+
+        // Save current annotations first
+        if (currentIndex !== -1 && annotator.hasChanges()) {
+            await saveAnnotations();
+        }
+
+        currentIndex = index;
+        const image = images[index];
+
+        document.getElementById('noImageMsg').style.display = 'none';
+        document.getElementById('imageName').textContent = image.name;
+
+        // Load image and annotations
+        try {
+            const data = await apiCall(`/api/annotate/${datasetName}/${image.path}`);
+            await annotator.loadImage(data.image_url, data.width, data.height);
+
+            if (data.annotations && data.annotations.length > 0) {
+                annotator.loadAnnotations(data.annotations);
+            }
+        } catch (error) {
+            console.error('Failed to load image:', error);
+        }
+
+        renderImageList();
+    }
+
+    async function saveAnnotations() {
+        if (currentIndex === -1) return;
+
+        const image = images[currentIndex];
+        const annotations = annotator.getAnnotations();
+        const dimensions = annotator.getImageDimensions();
+
+        try {
+            await apiCall(`/api/annotate/${datasetName}/${image.path}`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    annotations: annotations,
+                    width: dimensions.width,
+                    height: dimensions.height
+                })
+            });
+
+            showToast('Annotations saved!', 'success');
+            annotator.markSaved();
+        } catch (error) {
+            console.error('Failed to save:', error);
+        }
+    }
+
+    function updateAnnotationList() {
+        const annotations = annotator.getAnnotations();
+        const list = document.getElementById('annotationList');
+        document.getElementById('annotationCount').textContent = `(${annotations.length})`;
+
+        if (annotations.length === 0) {
+            list.innerHTML = '<p class="help-text">No annotations yet. Draw boxes on the image.</p>';
+            return;
+        }
+
+        list.innerHTML = annotations.map((ann, i) => {
+            const cls = classes.find(c => c.id === ann.class_id) || { name: 'Unknown', color: '#999' };
+            return `
+                <div class="annotation-item" data-index="${i}">
+                    <span class="class-color" style="background: ${cls.color}"></span>
+                    <span class="annotation-class">${cls.name}</span>
+                    <button class="delete-btn" onclick="annotator.deleteAnnotation(${i})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Class selection
+    document.querySelectorAll('.class-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            annotator.setCurrentClass(parseInt(btn.dataset.classId));
+        });
+    });
+
+    // Select first class by default
+    const firstClassBtn = document.querySelector('.class-btn');
+    if (firstClassBtn) {
+        firstClassBtn.classList.add('active');
+        annotator.setCurrentClass(0);
+    }
+
+    // Toolbar buttons
+    document.getElementById('boxTool').addEventListener('click', () => annotator.setTool('box'));
+    document.getElementById('selectTool').addEventListener('click', () => annotator.setTool('select'));
+    document.getElementById('zoomIn').addEventListener('click', () => annotator.zoomIn());
+    document.getElementById('zoomOut').addEventListener('click', () => annotator.zoomOut());
+    document.getElementById('resetZoom').addEventListener('click', () => annotator.resetZoom());
+    document.getElementById('undoBtn').addEventListener('click', () => annotator.undo());
+    document.getElementById('redoBtn').addEventListener('click', () => annotator.redo());
+    document.getElementById('saveBtn').addEventListener('click', saveAnnotations);
+    document.getElementById('clearBtn').addEventListener('click', () => annotator.clearAnnotations());
+
+    document.getElementById('prevImage').addEventListener('click', () => loadImage(currentIndex - 1));
+    document.getElementById('nextImage').addEventListener('click', () => loadImage(currentIndex + 1));
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+
+        switch (e.key) {
+            case 'b': annotator.setTool('box'); break;
+            case 's': annotator.setTool('select'); break;
+            case 'Delete': annotator.deleteSelected(); break;
+            case 'ArrowLeft': loadImage(currentIndex - 1); break;
+            case 'ArrowRight': loadImage(currentIndex + 1); break;
+            case '+': case '=': annotator.zoomIn(); break;
+            case '-': annotator.zoomOut(); break;
+            case '0': annotator.resetZoom(); break;
+        }
+
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            saveAnnotations();
+        }
+        if (e.ctrlKey && e.key === 'z') {
+            e.preventDefault();
+            annotator.undo();
+        }
+        if (e.ctrlKey && e.key === 'y') {
+            e.preventDefault();
+            annotator.redo();
+        }
+    });
+
+    // Initialize
+    loadImages();
+</script>
+{% endblock %}

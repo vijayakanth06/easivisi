@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dataset.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container">
+        <div class="header-with-actions">
+            <div>
+                <h1><i class="fas fa-database"></i> {{ dataset.name }}</h1>
+                <p>Manage images, annotations, and configuration</p>
+            </div>
+            <div class="header-actions">
+                <a href="/annotate/{{ dataset.name }}" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> Annotate
+                </a>
+                <a href="/train" class="btn btn-secondary">
+                    <i class="fas fa-cogs"></i> Train
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="mini-stat">
+            <i class="fas fa-image"></i>
+            <div>
+                <span class="stat-number">{{ dataset.train_images + dataset.val_images }}</span>
+                <span class="stat-label">Total Images</span>
+            </div>
+        </div>
+        <div class="mini-stat">
+            <i class="fas fa-graduation-cap"></i>
+            <div>
+                <span class="stat-number">{{ dataset.train_images }}</span>
+                <span class="stat-label">Training</span>
+            </div>
+        </div>
+        <div class="mini-stat">
+            <i class="fas fa-check-circle"></i>
+            <div>
+                <span class="stat-number">{{ dataset.val_images }}</span>
+                <span class="stat-label">Validation</span>
+            </div>
+        </div>
+        <div class="mini-stat">
+            <i class="fas fa-tags"></i>
+            <div>
+                <span class="stat-number">{{ dataset.classes|length }}</span>
+                <span class="stat-label">Classes</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Images -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-upload"></i> Upload Images</h2>
+        </div>
+        <div class="card-body">
+            <div class="upload-zone" id="uploadZone">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <p>Drag & drop images here or click to browse</p>
+                <input type="file" id="fileInput" multiple accept="image/*" hidden>
+            </div>
+            <div id="uploadProgress" class="upload-progress" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <span id="progressText">Uploading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-cog"></i> Dataset Configuration</h2>
+        </div>
+        <div class="card-body">
+            <div class="config-grid">
+                <!-- Classes -->
+                <div class="config-section">
+                    <h3>Class Labels</h3>
+                    <p class="help-text">Define the object classes you want to detect</p>
+                    <div id="classesContainer">
+                        {% for cls in dataset.classes %}
+                        <div class="class-tag">
+                            <span>{{ cls }}</span>
+                            <button onclick="removeClass(this)"><i class="fas fa-times"></i></button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="add-class-form">
+                        <input type="text" id="newClass" placeholder="Add class (e.g., car, person)">
+                        <button class="btn btn-sm btn-primary" onclick="addClass()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Split -->
+                <div class="config-section">
+                    <h3>Train/Val Split</h3>
+                    <p class="help-text">Split your images into training and validation sets</p>
+                    <div class="split-control">
+                        <label>Validation Ratio: <span id="splitValue">20</span>%</label>
+                        <input type="range" id="splitRatio" min="10" max="40" value="20">
+                        <button class="btn btn-secondary" onclick="splitDataset()">
+                            <i class="fas fa-random"></i> Split Dataset
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-actions">
+                <button class="btn btn-primary btn-lg" onclick="saveConfiguration()">
+                    <i class="fas fa-save"></i> Save Configuration
+                </button>
+                {% if dataset.has_yaml %}
+                <span class="badge badge-success"><i class="fas fa-check"></i> Configuration saved</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Images Gallery -->
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-images"></i> Images</h2>
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">All</button>
+                <button class="filter-tab" data-filter="train">Training</button>
+                <button class="filter-tab" data-filter="val">Validation</button>
+                <button class="filter-tab" data-filter="unsplit">Unsplit</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="image-gallery" id="imageGallery">
+                <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading images...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const datasetName = "{{ dataset.name }}";
+    let allImages = [];
+
+    // File upload zone
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+    async function handleFiles(files) {
+        if (files.length === 0) return;
+
+        const formData = new FormData();
+        for (const file of files) {
+            formData.append('files', file);
+        }
+
+        document.getElementById('uploadProgress').style.display = 'block';
+
+        try {
+            const response = await fetch(`/api/dataset/${datasetName}/upload`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.uploaded && result.uploaded.length > 0) {
+                showToast(`Uploaded ${result.uploaded.length} images!`, 'success');
+                loadImages();
+            }
+            if (result.errors && result.errors.length > 0) {
+                showToast(`${result.errors.length} files failed to upload`, 'error');
+            }
+        } catch (error) {
+            showToast('Upload failed', 'error');
+        } finally {
+            document.getElementById('uploadProgress').style.display = 'none';
+        }
+    }
+
+    // Load images
+    async function loadImages() {
+        try {
+            const data = await apiCall(`/api/dataset/${datasetName}/images`);
+            allImages = data.images || [];
+            renderImages('all');
+        } catch (error) {
+            document.getElementById('imageGallery').innerHTML = '<p>Failed to load images</p>';
+        }
+    }
+
+    function renderImages(filter) {
+        const gallery = document.getElementById('imageGallery');
+        const filtered = filter === 'all' ? allImages : allImages.filter(img => img.split === filter);
+
+        if (filtered.length === 0) {
+            gallery.innerHTML = '<div class="empty-state"><i class="fas fa-image"></i><p>No images found</p></div>';
+            return;
+        }
+
+        gallery.innerHTML = filtered.map(img => `
+            <div class="image-thumb" onclick="openAnnotator('${img.path}')">
+                <img src="/dataset/${datasetName}/image/${img.path}" alt="${img.name}" loading="lazy">
+                <div class="image-overlay">
+                    <span class="badge badge-${img.split === 'train' ? 'success' : img.split === 'val' ? 'info' : 'warning'}">${img.split}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Filter tabs
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            renderImages(tab.dataset.filter);
+        });
+    });
+
+    // Split slider
+    document.getElementById('splitRatio').addEventListener('input', (e) => {
+        document.getElementById('splitValue').textContent = e.target.value;
+    });
+
+    async function splitDataset() {
+        const ratio = parseInt(document.getElementById('splitRatio').value) / 100;
+
+        try {
+            const result = await apiCall(`/api/dataset/${datasetName}/split`, {
+                method: 'POST',
+                body: JSON.stringify({ val_ratio: ratio })
+            });
+
+            showToast(`Split complete! Train: ${result.train}, Val: ${result.val}`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } catch (error) {
+            // Error shown by apiCall
+        }
+    }
+
+    // Class management
+    function addClass() {
+        const input = document.getElementById('newClass');
+        const name = input.value.trim();
+        if (!name) return;
+
+        const container = document.getElementById('classesContainer');
+        const tag = document.createElement('div');
+        tag.className = 'class-tag';
+        tag.innerHTML = `<span>${name}</span><button onclick="removeClass(this)"><i class="fas fa-times"></i></button>`;
+        container.appendChild(tag);
+        input.value = '';
+    }
+
+    document.getElementById('newClass').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addClass();
+        }
+    });
+
+    function removeClass(btn) {
+        btn.parentElement.remove();
+    }
+
+    async function saveConfiguration() {
+        const classes = Array.from(document.querySelectorAll('.class-tag span')).map(el => el.textContent);
+
+        if (classes.length === 0) {
+            showToast('Please add at least one class', 'error');
+            return;
+        }
+
+        try {
+            await apiCall(`/api/dataset/${datasetName}/yaml`, {
+                method: 'POST',
+                body: JSON.stringify({ classes })
+            });
+
+            showToast('Configuration saved!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } catch (error) {
+            // Error shown by apiCall
+        }
+    }
+
+    function openAnnotator(imagePath) {
+        window.location.href = `/annotate/${datasetName}?image=${encodeURIComponent(imagePath)}`;
+    }
+
+    // Initialize
+    loadImages();
+</script>
+{% endblock %}

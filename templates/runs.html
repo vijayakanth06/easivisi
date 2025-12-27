@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Training Runs{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container">
+        <h1><i class="fas fa-history"></i> Training Runs</h1>
+        <p>View your training history and download models</p>
+    </div>
+</div>
+
+<div class="container">
+    <div class="card">
+        <div class="card-body">
+            {% if runs|length == 0 %}
+            <div class="empty-state">
+                <i class="fas fa-folder-open"></i>
+                <h3>No training runs yet</h3>
+                <p>Start training a model to see results here</p>
+                <a href="/train" class="btn btn-primary">
+                    <i class="fas fa-cogs"></i> Start Training
+                </a>
+            </div>
+            {% else %}
+            <div class="runs-grid">
+                {% for run in runs %}
+                <div class="run-card">
+                    <div class="run-header">
+                        <i class="fas fa-project-diagram"></i>
+                        <div>
+                            <h3>{{ run.name }}</h3>
+                            <span class="run-project">{{ run.project }}</span>
+                        </div>
+                    </div>
+
+                    <div class="run-meta">
+                        {% if run.created %}
+                        <span><i class="fas fa-calendar"></i> {{ run.created[:10] }}</span>
+                        {% endif %}
+                        {% if run.has_weights %}
+                        <span class="badge badge-success"><i class="fas fa-check"></i> Weights available</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="run-actions">
+                        {% if run.has_weights %}
+                        <a href="/dataset/{{ run.project }}/{{ run.name }}/weights/best.pt"
+                            class="btn btn-sm btn-primary" download>
+                            <i class="fas fa-download"></i> Download best.pt
+                        </a>
+                        {% endif %}
+                        <button class="btn btn-sm btn-secondary"
+                            onclick="showRunDetails('{{ run.project }}/{{ run.name }}')">
+                            <i class="fas fa-info-circle"></i> Details
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Run Details Modal -->
+<div class="modal" id="detailsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Run Details</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody">
+            <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function showRunDetails(runPath) {
+        document.getElementById('detailsModal').classList.add('active');
+        document.getElementById('modalTitle').textContent = runPath;
+
+        const body = document.getElementById('modalBody');
+        body.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+
+        try {
+            const data = await apiCall(`/api/runs/${runPath}`);
+
+            let html = '<div class="run-details">';
+
+            // Weights
+            if (Object.keys(data.weights).length > 0) {
+                html += '<h3>Weights</h3><ul>';
+                for (const [name, info] of Object.entries(data.weights)) {
+                    const sizeMB = (info.size / 1024 / 1024).toFixed(2);
+                    html += `<li><strong>${name}</strong> (${sizeMB} MB)</li>`;
+                }
+                html += '</ul>';
+            }
+
+            // Training args
+            if (data.args) {
+                html += '<h3>Training Arguments</h3><pre>' + JSON.stringify(data.args, null, 2) + '</pre>';
+            }
+
+            // Results summary
+            if (data.results && data.results.length > 0) {
+                const lastResult = data.results[data.results.length - 1];
+                html += '<h3>Final Metrics</h3><ul>';
+                for (const [key, value] of Object.entries(lastResult)) {
+                    if (typeof value === 'number') {
+                        html += `<li><strong>${key}:</strong> ${value.toFixed(4)}</li>`;
+                    }
+                }
+                html += '</ul>';
+            }
+
+            html += '</div>';
+            body.innerHTML = html;
+
+        } catch (error) {
+            body.innerHTML = '<p class="error">Failed to load details</p>';
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('detailsModal').classList.remove('active');
+    }
+
+    // Close on outside click
+    document.getElementById('detailsModal').addEventListener('click', (e) => {
+        if (e.target.id === 'detailsModal') closeModal();
+    });
+
+    // Close on escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+</script>
+{% endblock %}
