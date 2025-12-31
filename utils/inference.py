@@ -204,14 +204,26 @@ def list_available_models(models_dir, runs_dir):
         for project in os.listdir(runs_dir):
             project_path = os.path.join(runs_dir, project)
             if os.path.isdir(project_path):
-                for run in os.listdir(project_path):
-                    weights_path = os.path.join(project_path, run, 'weights', 'best.pt')
-                    if os.path.exists(weights_path):
-                        models.append({
-                            'name': f"{project}/{run}/best.pt",
-                            'type': 'trained',
-                            'path': weights_path
-                        })
+                # Check for weights directly in project folder (single level: runs/project/weights/)
+                weights_path = os.path.join(project_path, 'weights', 'best.pt')
+                if os.path.exists(weights_path):
+                    models.append({
+                        'name': f"{project}/best.pt",
+                        'type': 'trained',
+                        'path': weights_path
+                    })
+                else:
+                    # Check for runs inside project folder (two levels: runs/project/run/weights/)
+                    for run in os.listdir(project_path):
+                        run_path = os.path.join(project_path, run)
+                        if os.path.isdir(run_path):
+                            weights_path = os.path.join(run_path, 'weights', 'best.pt')
+                            if os.path.exists(weights_path):
+                                models.append({
+                                    'name': f"{project}/{run}/best.pt",
+                                    'type': 'trained',
+                                    'path': weights_path
+                                })
     
     # Models in models directory
     if os.path.exists(models_dir):
