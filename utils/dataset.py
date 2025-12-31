@@ -52,55 +52,95 @@ def create_dataset_structure(dataset_name):
 
 
 def split_dataset(dataset_name, val_ratio=0.2, seed=42):
-    """Split dataset into train/val sets."""
+    """Split dataset into train/val sets.
+    
+    Collects all images from the dataset (including from existing train/val folders)
+    and redistributes them according to the specified validation ratio.
+    """
     base_path = os.path.join(DATASET_DIR, dataset_name)
     images_path = os.path.join(base_path, 'images')
     labels_path = os.path.join(base_path, 'labels')
     
-    # Check for unsplit images (directly in images/ folder)
+    # Collect ALL images from all possible locations
     all_images = []
-    for ext in ['*.jpg', '*.jpeg', '*.png', '*.gif', '*.bmp', '*.webp']:
-        all_images.extend(Path(images_path).glob(ext))
-        all_images.extend(Path(images_path).glob(ext.upper()))
+    search_paths = [
+        images_path,                          # Base images folder
+        os.path.join(images_path, 'train'),   # Train folder
+        os.path.join(images_path, 'val'),     # Val folder
+    ]
+    
+    extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    
+    for search_path in search_paths:
+        if os.path.exists(search_path):
+            for f in os.listdir(search_path):
+                file_path = Path(search_path) / f
+                if file_path.is_file() and file_path.suffix.lower() in extensions:
+                    all_images.append(file_path)
     
     if not all_images:
-        # Images might already be in train/val folders
-        return {'train': 0, 'val': 0, 'message': 'No images to split or already split'}
+        return {'train': 0, 'val': 0, 'message': 'No images found in dataset'}
+    
+    # Create directories
+    train_img_dir = os.path.join(images_path, 'train')
+    val_img_dir = os.path.join(images_path, 'val')
+    train_lbl_dir = os.path.join(labels_path, 'train')
+    val_lbl_dir = os.path.join(labels_path, 'val')
+    
+    os.makedirs(train_img_dir, exist_ok=True)
+    os.makedirs(val_img_dir, exist_ok=True)
+    os.makedirs(train_lbl_dir, exist_ok=True)
+    os.makedirs(val_lbl_dir, exist_ok=True)
     
     # Shuffle and split
     random.seed(seed)
     random.shuffle(all_images)
     
-    val_count = int(len(all_images) * val_ratio)
+    val_count = max(1, int(len(all_images) * val_ratio))  # At least 1 for validation
     val_images = all_images[:val_count]
     train_images = all_images[val_count:]
     
-    # Create directories
-    os.makedirs(os.path.join(images_path, 'train'), exist_ok=True)
-    os.makedirs(os.path.join(images_path, 'val'), exist_ok=True)
-    os.makedirs(os.path.join(labels_path, 'train'), exist_ok=True)
-    os.makedirs(os.path.join(labels_path, 'val'), exist_ok=True)
+    train_moved = 0
+    val_moved = 0
     
-    # Move files
+    # Move to train folder
     for img in train_images:
-        dest = os.path.join(images_path, 'train', img.name)
-        shutil.move(str(img), dest)
-        # Move corresponding label if exists
-        label_file = os.path.join(labels_path, img.stem + '.txt')
-        if os.path.exists(label_file):
-            shutil.move(label_file, os.path.join(labels_path, 'train', img.stem + '.txt'))
+        if img.exists():
+            dest = os.path.join(train_img_dir, img.name)
+            if str(img) != dest:  # Only move if not already there
+                shutil.move(str(img), dest)
+            train_moved += 1
+            
+            # Move corresponding label if exists (check all possible locations)
+            for lbl_search in [labels_path, train_lbl_dir, val_lbl_dir]:
+                label_file = os.path.join(lbl_search, img.stem + '.txt')
+                if os.path.exists(label_file):
+                    lbl_dest = os.path.join(train_lbl_dir, img.stem + '.txt')
+                    if label_file != lbl_dest:
+                        shutil.move(label_file, lbl_dest)
+                    break
     
+    # Move to val folder
     for img in val_images:
-        dest = os.path.join(images_path, 'val', img.name)
-        shutil.move(str(img), dest)
-        label_file = os.path.join(labels_path, img.stem + '.txt')
-        if os.path.exists(label_file):
-            shutil.move(label_file, os.path.join(labels_path, 'val', img.stem + '.txt'))
+        if img.exists():
+            dest = os.path.join(val_img_dir, img.name)
+            if str(img) != dest:  # Only move if not already there
+                shutil.move(str(img), dest)
+            val_moved += 1
+            
+            # Move corresponding label if exists
+            for lbl_search in [labels_path, train_lbl_dir, val_lbl_dir]:
+                label_file = os.path.join(lbl_search, img.stem + '.txt')
+                if os.path.exists(label_file):
+                    lbl_dest = os.path.join(val_lbl_dir, img.stem + '.txt')
+                    if label_file != lbl_dest:
+                        shutil.move(label_file, lbl_dest)
+                    break
     
     return {
-        'train': len(train_images),
-        'val': len(val_images),
-        'message': 'Split completed successfully'
+        'train': train_moved,
+        'val': val_moved,
+        'message': f'Split completed: {train_moved} training, {val_moved} validation'
     }
 
 
