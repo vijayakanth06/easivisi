@@ -12,7 +12,7 @@ numpy==1.26.4
 pillow==11.3.0
 
 # Visualization & logging
-matplotlib==3.7.3
+matplotlib==3.10.8
 seaborn==0.13.2
 tensorboard==2.20.0
 
