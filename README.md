@@ -82,52 +82,54 @@ pip install -r requirements.txt
 
 ## 🚀 Usage
 
-### 1. Prepare Your Dataset
+### 1. Start the Web Application
 
-Organize your images and annotations in the YOLO format:
+```bash
+# Start the Flask server
+python app.py
+```
+
+Open your browser and navigate to `http://localhost:5000`
+
+### 2. Create a Dataset
+
+Use the web interface to:
+1. Go to **Datasets** page
+2. Click **Create New Dataset**
+3. Upload your images
+4. Define class names
+5. Annotate images using the built-in annotation tool
+6. Split into train/val sets
+
+### 3. Dataset Structure (Reference)
+
+Datasets are automatically organized in the YOLO format:
 
 ```
 dataset/
-├── images/
-│   ├── train/
-│   │   ├── image1.jpg
-│   │   ├── image2.jpg
-│   │   └── ...
-│   └── val/
-│       ├── image1.jpg
-│       └── ...
-├── labels/
-│   ├── train/
-│   │   ├── image1.txt
-│   │   └── ...
-│   └── val/
-│       └── ...
-└── dataset.yaml
+└── your_dataset/
+    ├── images/
+    │   ├── train/
+    │   └── val/
+    ├── labels/
+    │   ├── train/
+    │   └── val/
+    └── dataset.yaml
 ```
 
-### 2. Configure Dataset YAML
+### 4. Train Your Model
 
-Create a `dataset.yaml` file:
+Use the **Training** page in the web interface to:
+- Select your dataset
+- Choose a YOLO model variant
+- Configure hyperparameters
+- Start training with one click
 
-```yaml
-path: ./dataset  # dataset root directory
-train: images/train  # training images path
-val: images/val  # validation images path
-
-# Classes
-names:
-  0: class1
-  1: class2
-  2: class3
-```
-
-### 3. Train Your Model
+Or train via command line:
 
 ```bash
 python train.py
 ```
-
-Or use the web interface for a no-code experience!
 
 ---
 
@@ -161,8 +163,8 @@ Customize training parameters in `train.py`:
 After training, find your results in:
 
 ```
-runs_stain/
-└── yolov8_stain_v1/
+runs/
+└── your_training_run/
     ├── weights/
     │   ├── best.pt      # Best model weights
     │   └── last.pt      # Latest model weights
@@ -175,7 +177,7 @@ runs_stain/
 ### Monitor Training with TensorBoard
 
 ```bash
-tensorboard --logdir runs_stain
+tensorboard --logdir runs
 ```
 
 ---
@@ -208,14 +210,32 @@ tensorboard --logdir runs_stain
 
 ```
 easivisi/
-├── dataset/              # Dataset directory
-│   ├── images/          # Training and validation images
-│   ├── labels/          # YOLO format annotations
-│   └── dataset.yaml     # Dataset configuration
+├── app.py               # Flask web application
+├── config.py            # Application configuration
 ├── train.py             # Model training script
 ├── requirements.txt     # Python dependencies
 ├── README.md            # Project documentation
-└── runs_stain/          # Training outputs (generated)
+├── dataset/             # Dataset storage
+│   └── <dataset_name>/
+│       ├── images/      # Training and validation images
+│       ├── labels/      # YOLO format annotations
+│       └── dataset.yaml # Dataset configuration
+├── models/              # Pre-trained model weights
+├── runs/                # Training outputs (generated)
+├── uploads/             # Temporary upload storage
+├── static/              # Static assets (CSS, JS)
+├── templates/           # HTML templates
+│   ├── index.html       # Home page
+│   ├── dataset.html     # Dataset management
+│   ├── annotate.html    # Annotation tool
+│   ├── train.html       # Training configuration
+│   ├── inference.html   # Model inference
+│   └── runs.html        # Training history
+└── utils/               # Utility modules
+    ├── annotation.py    # Annotation helpers
+    ├── dataset.py       # Dataset management
+    ├── training.py      # Training pipeline
+    └── inference.py     # Inference helpers
 ```
 
 ---
@@ -250,7 +270,7 @@ flake8 .
 - [x] YOLOv8 training integration
 - [x] Flask web interface for annotation
 - [x] Real-time training visualization
-- [x] Model export to ONNX, TensorRT
+- [ ] Model export to ONNX, TensorRT
 - [ ] Docker containerization
 - [ ] REST API for inference
 - [ ] Multi-user support with authentication
