@@ -17,6 +17,22 @@
             </a>
         </div>
 
+        <!-- Annotation Progress -->
+        <div class="sidebar-section">
+            <h3>Progress</h3>
+            <div class="progress-stats" id="progressStats">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                </div>
+                <div class="progress-text">
+                    <span><i class="fas fa-check-circle" style="color: #22c55e;"></i> Annotated: <strong
+                            id="annotatedCount">0</strong></span>
+                    <span><i class="fas fa-clock" style="color: #f59e0b;"></i> Remaining: <strong
+                            id="remainingCount">0</strong></span>
+                </div>
+            </div>
+        </div>
+
         <!-- Image List -->
         <div class="sidebar-section">
             <h3>Images</h3>
@@ -139,11 +155,16 @@
     // Load images
     let images = [];
     let currentIndex = -1;
+    let annotatedCount = 0;
+    let totalCount = 0;
 
     async function loadImages() {
         try {
             const data = await apiCall(`/api/dataset/${datasetName}/images`);
             images = data.images || [];
+            annotatedCount = data.annotated || 0;
+            totalCount = data.total || images.length;
+            updateProgressStats();
             renderImageList();
 
             // Check for image in URL
@@ -166,6 +187,13 @@
         }
     }
 
+    function updateProgressStats() {
+        const percentage = totalCount > 0 ? Math.round((annotatedCount / totalCount) * 100) : 0;
+        document.getElementById('progressBar').style.width = `${percentage}%`;
+        document.getElementById('annotatedCount').textContent = annotatedCount;
+        document.getElementById('remainingCount').textContent = totalCount - annotatedCount;
+    }
+
     function renderImageList() {
         const list = document.getElementById('imageList');
         if (images.length === 0) {
@@ -174,9 +202,10 @@
         }
 
         list.innerHTML = images.map((img, i) => `
-            <div class="image-item ${i === currentIndex ? 'active' : ''}" data-index="${i}">
+            <div class="image-item ${i === currentIndex ? 'active' : ''} ${img.annotated ? 'annotated' : ''}" data-index="${i}">
                 <img src="/dataset/${datasetName}/image/${img.path}" alt="${img.name}" loading="lazy">
                 <span>${img.name}</span>
+                ${img.annotated ? '<i class="fas fa-check-circle annotation-badge"></i>' : ''}
             </div>
         `).join('');
 
@@ -233,6 +262,26 @@
 
             showToast('Annotations saved!', 'success');
             annotator.markSaved();
+
+            // Update progress stats
+            const wasAnnotated = image.annotated;
+            const hasAnnotations = annotations.length > 0;
+
+            // Update the image's annotated status
+            image.annotated = hasAnnotations;
+
+            // Update the annotated count
+            if (!wasAnnotated && hasAnnotations) {
+                // Image is newly annotated
+                annotatedCount++;
+            } else if (wasAnnotated && !hasAnnotations) {
+                // Image annotations were cleared
+                annotatedCount--;
+            }
+
+            // Refresh the UI
+            updateProgressStats();
+            renderImageList();
         } catch (error) {
             console.error('Failed to save:', error);
         }
