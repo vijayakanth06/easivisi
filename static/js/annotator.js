@@ -411,9 +411,11 @@ class ImageAnnotator {
         const classInfo = this.classes.find(c => c.id === box.class_id) || { color: '#00ff00' };
         const color = classInfo.color;
 
-        // Draw fill
-        this.ctx.fillStyle = isDrawing ? `${color}40` : `${color}30`;
-        this.ctx.fillRect(x, y, width, height);
+        // Draw fill - only show fill when actively drawing for visibility
+        if (isDrawing) {
+            this.ctx.fillStyle = `${color}40`;
+            this.ctx.fillRect(x, y, width, height);
+        }
 
         // Draw border
         this.ctx.strokeStyle = color;
