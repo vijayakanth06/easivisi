@@ -21,7 +21,7 @@ class ImageAnnotator {
         this.annotations = [];
         this.selectedIndex = -1;
         this.currentClassId = 0;
-        this.tool = 'box'; // 'box' or 'select'
+        this.tool = 'box'; // 'box', 'select', or 'pan'
         this.zoom = 1;
         this.pan = { x: 0, y: 0 };
         this.hasUnsavedChanges = false;
@@ -30,7 +30,10 @@ class ImageAnnotator {
         this.isDrawing = false;
         this.isDragging = false;
         this.isResizing = false;
+        this.isPanning = false;
+        this.spacePressed = false;
         this.startPoint = { x: 0, y: 0 };
+        this.panStart = { x: 0, y: 0 };
         this.currentBox = null;
         this.resizeHandle = null;
 
@@ -70,6 +73,27 @@ class ImageAnnotator {
         this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
         this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e));
         this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+
+        // Keyboard events for space bar panning
+        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+    }
+
+    handleKeyDown(e) {
+        if (e.code === 'Space' && !this.spacePressed && e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            this.spacePressed = true;
+            this.canvas.style.cursor = 'grab';
+        }
+    }
+
+    handleKeyUp(e) {
+        if (e.code === 'Space') {
+            this.spacePressed = false;
+            if (!this.isPanning) {
+                this.updateCursor(0, 0);
+            }
+        }
     }
 
     // Coordinate conversion
@@ -117,6 +141,15 @@ class ImageAnnotator {
         const y = e.clientY - rect.top;
         const imgPoint = this.screenToImage(x, y);
 
+        // Check for pan mode: middle mouse button, space+click, or pan tool
+        if (e.button === 1 || this.spacePressed || this.tool === 'pan') {
+            e.preventDefault();
+            this.isPanning = true;
+            this.panStart = { x: e.clientX - this.pan.x, y: e.clientY - this.pan.y };
+            this.canvas.style.cursor = 'grabbing';
+            return;
+        }
+
         // Check if clicking on resize handle
         if (this.selectedIndex !== -1 && this.tool === 'select') {
             const handle = this.getResizeHandle(x, y);
@@ -158,6 +191,14 @@ class ImageAnnotator {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         const imgPoint = this.screenToImage(x, y);
+
+        // Handle panning
+        if (this.isPanning) {
+            this.pan.x = e.clientX - this.panStart.x;
+            this.pan.y = e.clientY - this.panStart.y;
+            this.render();
+            return;
+        }
 
         // Update cursor based on context
         this.updateCursor(x, y);
@@ -203,6 +244,18 @@ class ImageAnnotator {
     }
 
     handleMouseUp(e) {
+        if (this.isPanning) {
+            this.isPanning = false;
+            if (this.spacePressed) {
+                this.canvas.style.cursor = 'grab';
+            } else if (this.tool === 'pan') {
+                this.canvas.style.cursor = 'grab';
+            } else {
+                this.updateCursor(0, 0);
+            }
+            return;
+        }
+
         if (this.isResizing) {
             this.isResizing = false;
             this.resizeHandle = null;
@@ -342,6 +395,11 @@ class ImageAnnotator {
     }
 
     updateCursor(screenX, screenY) {
+        if (this.spacePressed || this.tool === 'pan') {
+            this.canvas.style.cursor = this.isPanning ? 'grabbing' : 'grab';
+            return;
+        }
+
         if (this.tool === 'box') {
             this.canvas.style.cursor = 'crosshair';
             return;
@@ -529,6 +587,9 @@ class ImageAnnotator {
         document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
         if (tool === 'box') {
             document.getElementById('boxTool').classList.add('active');
+        } else if (tool === 'pan') {
+            document.getElementById('panTool')?.classList.add('active');
+            this.canvas.style.cursor = 'grab';
         } else {
             document.getElementById('selectTool').classList.add('active');
         }
