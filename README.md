@@ -27,20 +27,45 @@ EasiVisi is a powerful, user-friendly **Flask web application** that enables use
 
 ## 📸 Screenshots
 
-### Dashboard & Dataset Management
+<details>
+<summary><strong>🖥️ Dashboard & Dataset Management</strong></summary>
+<br>
+
 ![Dashboard](static/images/Screenshot%202026-01-01%20221029.png)
 
-### Image Annotation Tool
+</details>
+
+<details>
+<summary><strong>✏️ Image Annotation Tool</strong></summary>
+<br>
+
 ![Annotation Tool](static/images/Screenshot%202026-01-01%20221123.png)
 
-### Class Label Configuration
+</details>
+
+<details>
+<summary><strong>🏷️ Class Label Configuration</strong></summary>
+<br>
+
 ![Class Configuration](static/images/Screenshot%202026-01-01%20221141.png)
 
-### Training Configuration
+</details>
+
+<details>
+<summary><strong>⚙️ Training Configuration</strong></summary>
+<br>
+
 ![Training Setup](static/images/Screenshot%202026-01-01%20221232.png)
 
-### Object Detection Inference
+</details>
+
+<details>
+<summary><strong>🎯 Object Detection Inference</strong></summary>
+<br>
+
 ![Inference Results](static/images/Screenshot%202026-01-01%20221311.png)
+
+</details>
 
 ---
 
